@@ -28,6 +28,24 @@ class Tapper:
         self.name = '',
         self.wallet = ''
 
+    async def send_plausible_event(self,http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
+        try:
+            payload = {
+                "d": "app.paws.community",
+                "n": event_name,
+                "r": None,
+                "u": web_data
+            }
+            response = http_client.post("https://plausible.io/api/event", json=payload)
+            if response.status_code == 202:
+                logger.success(
+                    f'{self.session_name} | Sent plausible game event: <fg #008080>{event_name}</fg #008080>')
+                return True
+            else:
+                return False
+        except:
+            return False
+
     async def login(self, http_client: cloudscraper.CloudScraper, tg_web_data: str, retry=0):
         try:
             payload = {'data': tg_web_data}
@@ -249,6 +267,9 @@ class Tapper:
                     else:
                         logger.info(f"{self.session_name} | Antidetect: endpoints successfully checked")
 
+                    if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
+                        await asyncio.sleep(randint(5, 10))
+                        continue
                     auth_data = await self.login(http_client=scraper, tg_web_data=tg_web_data)
                     auth_token = auth_data[0]
                     if auth_token is None:
