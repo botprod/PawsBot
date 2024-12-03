@@ -149,11 +149,12 @@ class Tapper:
 
                         if result is not None:
                             await asyncio.sleep(delay=randint(5, 10))
-                            is_claimed = await self.claim_task_reward(http_client, task['_id'])
+                            is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
                             if is_claimed:
                                 rewards = task['rewards'][0]
+                                amount = rewards['amount'] if amount is None else amount
                                 logger.success(f"{self.session_name} | Task <lc>{task['title']}</lc> completed! | "
-                                               f"Reward: <e>+{rewards['amount']}</e> PAWS")
+                                               f"Reward: <e>+{amount}</e> PAWS")
                             else:
                                 logger.info(f"{self.session_name} | "
                                             f"Rewards for task <lc>{task['title']}</lc> not claimed")
@@ -193,12 +194,17 @@ class Tapper:
             response.raise_for_status()
             response_json = response.json()
             status = response_json.get('success', False) or response_json.get('completed', False)
-            return status
+            reward_data = response_json.get('data', None)
+            amount = None
+            if reward_data:
+                amount = reward_data.get('amount', None)
+            return status, amount
 
         except Exception as e:
             logger.error(
                 f"{self.session_name} | Unknown error while claim reward for task <lc>{task_id}</lc> | Error: {e}")
             await asyncio.sleep(delay=3)
+            return None, None
 
     async def get_referrals(self, http_client: cloudscraper.CloudScraper):
         try:
