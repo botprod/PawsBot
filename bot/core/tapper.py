@@ -133,10 +133,13 @@ class Tapper:
                                         if current_users >= 10000000:
                                             continue
                                         result = await self.verify_task(http_client, task['_id'])
-                                        if result is not None:
-                                            logger.success(
-                                                f"{self.session_name} | Task <lc>{task['title']}</lc> verified! | "
-                                                f"Waiting reward")
+                                    elif task['action'] == 'customReaction':
+                                        result = await self.verify_task(http_client, task['_id'])
+
+                                    if result is not None:
+                                        logger.success(
+                                            f"{self.session_name} | Task <lc>{task['title']}</lc> verified! | "
+                                            f"Waiting reward")
                                     continue
                             elif task['code'] == 'wallet':
                                 if self.wallet is not None and len(self.wallet) > 0:
@@ -157,6 +160,8 @@ class Tapper:
 
                             result = await self.verify_task(http_client, task['_id'])
 
+                        if task['action'] == 'customReaction':
+                            continue
                         if result is not None:
                             await asyncio.sleep(delay=randint(5, 10))
                             is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
