@@ -160,8 +160,6 @@ class Tapper:
 
                             result = await self.verify_task(http_client, task['_id'])
 
-                        if task['action'] == 'customReaction':
-                            continue
                         if result is not None:
                             await asyncio.sleep(delay=randint(5, 10))
                             is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
