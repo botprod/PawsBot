@@ -97,6 +97,7 @@ class Tapper:
         try:
             tasks = await self.get_all_tasks(http_client)
             if tasks:
+                tasks = sorted(tasks, key=lambda t: t.get('sort', 999))
                 for task in tasks:
                     progress = task['progress']
                     if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS:
@@ -120,27 +121,17 @@ class Tapper:
                                     continue
                             elif task['code'] in settings.SIMPLE_TASKS or is_partner:
                                 logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
-                            elif task['code'] == 'daily' or (task['code'] == 'custom'
-                                                             and is_latest_tg_version(http_client.headers['User-Agent'])):
+                            elif task['code'] == 'daily' or task['code'] == 'custom':
                                 end_time = task.get('availableUntil', 0)
                                 curr_time = time() * 1000
                                 if end_time < curr_time:
                                     continue
                                 logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
                                 if task['flag'] == 1:
-                                    if task['type'] == 'click':
-                                        current_users = int(task['data'])
-                                        if current_users >= 10000000:
+                                    if task['type'] == 'ton':
+                                        if progress['status'] != 'check':
                                             continue
-                                        result = await self.verify_task(http_client, task['_id'])
-                                    elif task['action'] == 'customReaction':
-                                        result = await self.verify_task(http_client, task['_id'])
 
-                                    if result is not None:
-                                        logger.success(
-                                            f"{self.session_name} | Task <lc>{task['title']}</lc> verified! | "
-                                            f"Waiting reward")
-                                    continue
                             elif task['code'] == 'wallet':
                                 if self.wallet is not None and len(self.wallet) > 0:
                                     logger.info(
