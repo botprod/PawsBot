@@ -277,9 +277,9 @@ class Tapper:
                     else:
                         logger.info(f"{self.session_name} | Antidetect: endpoints successfully checked")
 
-                    if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
-                        await asyncio.sleep(randint(5, 10))
-                        continue
+                    #if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
+                    #   await asyncio.sleep(randint(5, 10))
+                    #    continue
                     auth_data = await self.login(http_client=scraper, tg_web_data=tg_web_data)
                     auth_token = auth_data[0]
                     if auth_token is None:
