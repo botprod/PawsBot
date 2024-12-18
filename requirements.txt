@@ -40,3 +40,8 @@ Telethon~=1.37.0
 tonsdk==1.0.15
 tqdm==4.66.5
 cloudscraper==1.2.71
+solana~=0.36.1
+base58~=2.1.1
+mnemonic~=0.21
+solders~=0.23.0
+httpx~=0.28.1

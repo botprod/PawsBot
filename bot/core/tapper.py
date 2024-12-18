@@ -18,6 +18,7 @@ from random import randint
 from ..utils.api_checker import is_valid_endpoints
 from ..utils.tg_manager.TGSession import TGSession
 from bot.core.WalletManager.WalletManager import get_valid_wallet, set_wallet
+from bot.core.WalletManager.SolanaManager import get_solana_valid_wallet, set_solana_wallet
 
 
 class Tapper:
@@ -25,8 +26,10 @@ class Tapper:
         self.tg_session = tg_session
         self.session_name = tg_session.session_name
         self.start_param = ''
-        self.name = '',
+        self.name = ''
         self.wallet = ''
+        self.solana_wallet = ''
+        self.paws_id = ''
 
     async def send_plausible_event(self,http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
         try:
@@ -119,7 +122,7 @@ class Tapper:
                                 referrals = await self.get_referrals(http_client)
                                 if counter > len(referrals):
                                     continue
-                            elif task['code'] in settings.SIMPLE_TASKS or is_partner:
+                            elif (task['code'] in settings.SIMPLE_TASKS or is_partner) and task['flag'] == 0:
                                 logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
                             elif task['code'] == 'daily' or task['code'] == 'custom':
                                 end_time = task.get('availableUntil', 0)
@@ -138,6 +141,17 @@ class Tapper:
                                         f"{self.session_name} | Performing wallet task: <lc>{task['title']}</lc>")
                                 else:
                                     continue
+
+                            elif task['code'] == 'custom1' and task['type'] == 'soll-wallet':
+                                end_time = task.get('availableUntil', 0)
+                                curr_time = time() * 1000
+                                if (self.solana_wallet is not None and len(self.solana_wallet) > 0
+                                        and end_time > curr_time):
+                                    logger.info(f"{self.session_name} | "
+                                                f"Performing Solana wallet task: <lc>{task['title']}</lc>")
+                                else:
+                                    continue
+
                             elif task['code'] == 'emojiName':
                                 logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
                                 if '🐾' not in self.tg_session.name:
@@ -222,6 +236,47 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while getting referrals | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def check_wallet_status(self, scraper: cloudscraper.CloudScraper, wallet_type: str,
+                                  is_connected: bool, need_to_connect: bool, need_to_disconnect: bool):
+        if not is_connected and need_to_connect:
+            await asyncio.sleep(randint(5, 10))
+            valid_wallet = get_valid_wallet() if wallet_type == 'Ton' else get_solana_valid_wallet()
+            if valid_wallet is not None:
+                wallet_address = valid_wallet['address']
+                logger.info(f'{self.session_name} | Found valid {wallet_type} wallet: <y>{wallet_address}</y>')
+                result = None
+                if wallet_type == 'Ton':
+                    result = await set_wallet(self.session_name, scraper, wallet_address)
+                elif wallet_type == 'Solana':
+                    result = await set_solana_wallet(self.session_name, scraper, wallet_address, self.paws_id)
+
+                if result is not None:
+                    logger.success(f'{self.session_name} | '
+                                   f'{wallet_type} wallet: <y>{wallet_address}</y> successfully connected')
+                    if wallet_type == 'Ton':
+                        self.wallet = wallet_address
+                    elif wallet_type == 'Solana':
+                        self.solana_wallet = wallet_address
+            else:
+                logger.warning(f'{self.session_name} | A valid {wallet_type} wallet was not found. '
+                               f'Try adding new wallets manually or generating them using command 3')
+
+        elif is_connected and need_to_disconnect:
+            await asyncio.sleep(randint(5, 10))
+            result = None
+            if wallet_type == 'Ton':
+                result = await set_wallet(self.session_name, scraper, self.wallet, connect=False)
+            elif wallet_type == 'Solana':
+                result = await set_solana_wallet(self.session_name, scraper, self.solana_wallet,
+                                                 self.paws_id, connect=False)
+            if result is not None:
+                logger.success(f'{self.session_name} | '
+                               f'{wallet_type} wallet: <y>{self.wallet}</y> successfully disconnected')
+                if wallet_type == 'Ton':
+                    self.wallet = None
+                elif wallet_type == 'Solana':
+                    self.solana_wallet = None
+
     async def get_user_info(self, http_client: cloudscraper.CloudScraper, retry=0):
         try:
             response = http_client.get('https://api.paws.community/v1/user')
@@ -279,7 +334,7 @@ class Tapper:
 
                     #if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
                     #   await asyncio.sleep(randint(5, 10))
-                    #    continue
+                    #   continue
                     auth_data = await self.login(http_client=scraper, tg_web_data=tg_web_data)
                     auth_token = auth_data[0]
                     if auth_token is None:
@@ -293,35 +348,30 @@ class Tapper:
                     http_client.headers['Authorization'] = f'Bearer {auth_token}'
                     scraper.headers = http_client.headers.copy()
                     user_info = auth_data[1]
+                    self.paws_id = user_info['_id']
                     balance = user_info['gameData']['balance']
                     wallet = user_info['userData'].get('wallet', None)
+                    solana_wallet = user_info['userData'].get('solanaWallet', None)
                     self.wallet = wallet
+                    self.solana_wallet = solana_wallet
                     is_wallet_connected = wallet is not None and len(wallet) > 0
-                    wallet_status = f"Wallet: <y>{wallet}</y>" if is_wallet_connected else 'Wallet not connected'
-                    logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS | {wallet_status}")
+                    is_solana_wallet_connected = solana_wallet is not None and len(solana_wallet) > 0
+                    wallet_status = f"Ton Wallet: <y>{wallet}</y>" if is_wallet_connected \
+                        else 'Ton wallet not connected'
+                    solana_wallet_status = f"Solana wallet: <y>{solana_wallet}</y>" if is_solana_wallet_connected \
+                        else 'Solana wallet not connected'
+                    logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS")
+                    logger.info(f"{self.session_name} | {wallet_status}")
+                    logger.info(f"{self.session_name} | {solana_wallet_status}")
 
-                    if not is_wallet_connected and settings.CONNECT_TON_WALLET:
-                        await asyncio.sleep(randint(5, 10))
-                        valid_wallet = get_valid_wallet()
-                        if valid_wallet is not None:
-                            ton_wallet_address = valid_wallet['address']
-                            logger.info(f'{self.session_name} | Found valid wallet: <y>{ton_wallet_address}</y>')
-                            result = await set_wallet(self.session_name, scraper, ton_wallet_address)
-                            if result:
-                                logger.success(f'{self.session_name} | '
-                                               f'Wallet: <y>{ton_wallet_address}</y> successfully connected')
-                                self.wallet = ton_wallet_address
-                        else:
-                            logger.warning(f'{self.session_name} | A valid wallet was not found. '
-                                           f'Try adding new wallets manually or generating them using command 3')
-
-                    elif is_wallet_connected and settings.DISCONNECT_TON_WALLET:
-                        await asyncio.sleep(randint(5, 10))
-                        result = await set_wallet(self.session_name, scraper, self.wallet, connect=False)
-                        if result:
-                            logger.success(f'{self.session_name} | '
-                                           f'Wallet: <y>{self.wallet}</y> successfully disconnected')
-                            self.wallet = None
+                    await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
+                                                   is_connected=is_wallet_connected,
+                                                   need_to_connect=settings.CONNECT_TON_WALLET,
+                                                   need_to_disconnect=settings.DISCONNECT_TON_WALLET)
+                    await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
+                                                   is_connected=is_solana_wallet_connected,
+                                                   need_to_connect=settings.CONNECT_SOLANA_WALLET,
+                                                   need_to_disconnect=settings.DISCONNECT_SOLANA_WALLET)
 
                     if settings.AUTO_TASK:
                         await asyncio.sleep(delay=randint(5, 10))

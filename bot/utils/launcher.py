@@ -11,6 +11,7 @@ from bot.core.registrator import register_sessions
 from bot.utils.accounts import Accounts
 from bot.core.TgManager.tg_manager import SessionManager
 from bot.core.WalletManager.WalletManager import generate_wallets, get_not_connected_wallets
+from bot.core.WalletManager.SolanaManager import get_solana_not_connected_wallets, generate_solana_wallets
 
 
 start_text = """
@@ -27,6 +28,7 @@ Select an action:
     1. Run bot
     2. Create session
     3. Generate TON wallets
+    4. Generate Solana wallets
 """
 
 
@@ -47,14 +49,23 @@ async def process() -> None:
 
             if not action.isdigit():
                 logger.warning("Action must be number")
-            elif action not in ["1", "2", "3"]:
-                logger.warning("Action must be 1, 2 or 3")
+            elif action not in ["1", "2", "3", "4"]:
+                logger.warning("Action must be 1, 2, 3 or 4")
             else:
                 action = int(action)
                 break
 
-    if action == 3:
-        count = input("Enter the number of wallets to generate: ")
+    if action == 4:
+        count = input("Enter the number of wallets (Solana) to generate: ")
+        try:
+            count = int(count)
+            generate_solana_wallets(count)
+            logger.success('Wallets successfully generated, check solana_wallets.txt file')
+        except ValueError:
+            logger.warning("Please enter a valid number.")
+            return
+    elif action == 3:
+        count = input("Enter the number of wallets (Ton) to generate: ")
         try:
             count = int(count)
             generate_wallets(count)
@@ -80,8 +91,10 @@ async def run_tasks(accounts: [Any, Any, list]):
 
     if settings.CONNECT_TON_WALLET:
         valid_wallets = get_not_connected_wallets()
-        logger.info(f'Found <e>{len(valid_wallets)}</e> not connected wallet/s')
-
+        logger.info(f'Found <e>{len(valid_wallets)}</e> not connected wallet/s (Ton)')
+    if settings.CONNECT_SOLANA_WALLET:
+        valid_solana_wallets = get_solana_not_connected_wallets()
+        logger.info(f'Found <e>{len(valid_solana_wallets)}</e> not connected wallet/s (Solana)')
     for account in accounts:
         session_name, user_agent, raw_proxy = account.values()
         tg_session = await manager.get_tg_session(session_name=session_name, proxy=raw_proxy)

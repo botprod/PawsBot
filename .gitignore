@@ -13,3 +13,5 @@ __pycache__
 registered_sessions.txt
 
 wallets.*
+
+solana_wallets.*

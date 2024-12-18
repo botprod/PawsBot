@@ -12,10 +12,12 @@ class Settings(BaseSettings):
     AUTO_TASK: bool = True
     JOIN_TG_CHANNELS: bool = False
     REF_ID: str = 'idqtVYZG'
-    DISABLED_TASKS: list[str] = ['boost']
+    DISABLED_TASKS: list[str] = ['boost', 'emoji']
     SIMPLE_TASKS: list[str] = ['twitter', 'linked', 'paragraph']
     CONNECT_TON_WALLET: bool = False
     DISCONNECT_TON_WALLET: bool = False
+    CONNECT_SOLANA_WALLET: bool = False
+    DISCONNECT_SOLANA_WALLET: bool = False
     CLEAR_TG_NAME: bool = False
 
 
