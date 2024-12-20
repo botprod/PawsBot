@@ -129,11 +129,14 @@ class Tapper:
                                 curr_time = time() * 1000
                                 if end_time < curr_time:
                                     continue
-                                logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
                                 if task['flag'] == 1:
+                                    if task['type'] == 'social':
+                                        if progress['current'] != progress['total']:
+                                            continue
                                     if task['type'] == 'ton':
                                         if progress['status'] != 'check':
                                             continue
+                                logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
 
                             elif task['code'] == 'wallet':
                                 if self.wallet is not None and len(self.wallet) > 0:
