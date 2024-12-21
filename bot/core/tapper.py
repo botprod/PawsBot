@@ -104,8 +104,9 @@ class Tapper:
                 for task in tasks:
                     progress = task['progress']
                     if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS:
-                        result = True if progress['current'] == progress['total'] else None
-                        if progress['current'] < progress['total']:
+                        result = True if (progress['current'] == progress['total'] and
+                                          progress['status'] == "claimable") else None
+                        if progress['current'] < progress['total'] or progress['status'] != "claimable":
                             is_partner = task.get('partner', False)
                             if task['code'] == 'telegram':
                                 if task['flag'] == 0:
@@ -131,7 +132,7 @@ class Tapper:
                                     continue
                                 if task['flag'] == 1:
                                     if task['type'] == 'social':
-                                        if progress['current'] != progress['total']:
+                                        if progress['current'] != progress['total'] or progress['status'] != 'start':
                                             continue
                                     if task['type'] == 'ton':
                                         if progress['status'] != 'check':
