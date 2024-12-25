@@ -10,9 +10,10 @@ from bot.utils import logger
 base_api_url = 'https://api.paws.community/v1'
 auth_endpoints = ['user/auth']
 endpoints = ['quests/completed', 'quests/claim',
-             'referral/my', 'user',
+             'referral/my', 'user', 'user/grinch',
              'quests/list', 'user/leaderboard',
-             'user/wallet', 'user/refresh']
+             'user/wallet', 'user/refresh',
+             'quests/list?type=christmas']
 
 
 def find_js_files(base_url):

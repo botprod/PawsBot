@@ -30,6 +30,7 @@ class Tapper:
         self.wallet = ''
         self.solana_wallet = ''
         self.paws_id = ''
+        self.is_grinch = None
 
     async def send_plausible_event(self,http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
         try:
@@ -301,6 +302,50 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while getting user info | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def set_grinch_event(self, http_client: cloudscraper.CloudScraper):
+        try:
+            response = http_client.post('https://api.paws.community/v1/user/grinch', json={})
+            response.raise_for_status()
+            response_json = response.json()
+            if response_json.get('success', False):
+                logger.success(f'{self.session_name} | Grinch event successfully started')
+                self.is_grinch = False
+            else:
+                raise Exception
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while setting Grinch event | Error: {e}")
+            await asyncio.sleep(delay=3)
+
+    async def processing_grinch_tasks(self, http_client: cloudscraper.CloudScraper):
+        try:
+            logger.info(f'{self.session_name} | Processing Grinch tasks')
+            response = http_client.get('https://api.paws.community/v1/quests/list?type=christmas')
+            response.raise_for_status()
+            response_json = response.json()
+            tasks = response_json['data']
+            tasks = sorted(tasks, key=lambda t: t.get('sort', 999), reverse=True)
+            for task in tasks:
+                await asyncio.sleep(randint(2, 5))
+                progress = task['progress']
+                if not progress['claimed']:
+                    result = await self.verify_task(http_client, task['_id'])
+                    if result is not None:
+                        await asyncio.sleep(delay=randint(2, 7))
+                        is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
+                        if is_claimed:
+                            reward = f" | Reward: <e>+{amount}</e> PAWS" if amount is not None else ''
+                            logger.success(f"{self.session_name} | Grinch task <lc>{task['title']}</lc> completed!"
+                                           f"{reward}")
+                        else:
+                            logger.info(f"{self.session_name} | "
+                                        f"Rewards for task <lc>{task['title']}</lc> not claimed")
+                            break
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | Unknown error while processing Grinch tasks | Error: {e}")
+            await asyncio.sleep(delay=3)
+
     async def run(self, user_agent: str, proxy: str | None) -> None:
         access_token_created_time = 0
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
@@ -356,6 +401,7 @@ class Tapper:
                     balance = user_info['gameData']['balance']
                     wallet = user_info['userData'].get('wallet', None)
                     solana_wallet = user_info['userData'].get('solanaWallet', None)
+                    self.is_grinch = user_info.get('grinchRemoved', None)
                     self.wallet = wallet
                     self.solana_wallet = solana_wallet
                     is_wallet_connected = wallet is not None and len(wallet) > 0
@@ -367,6 +413,10 @@ class Tapper:
                     logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS")
                     logger.info(f"{self.session_name} | {wallet_status}")
                     logger.info(f"{self.session_name} | {solana_wallet_status}")
+
+                    if self.is_grinch is None:
+                        await asyncio.sleep(2)
+                        await self.set_grinch_event(http_client=scraper)
 
                     await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
                                                    is_connected=is_wallet_connected,
@@ -381,6 +431,10 @@ class Tapper:
                         await asyncio.sleep(delay=randint(5, 10))
                         await self.processing_tasks(http_client=scraper)
                         logger.info(f"{self.session_name} | All available tasks completed")
+
+                    if not self.is_grinch:
+                        await asyncio.sleep(delay=randint(5, 10))
+                        await self.processing_grinch_tasks(http_client=scraper)
 
                 if settings.CLEAR_TG_NAME and '🐾' in self.tg_session.name:
                     logger.info(f"{self.session_name} | Removing 🐾 from name..")
