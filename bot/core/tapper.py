@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import sys
 from time import time
 
@@ -97,13 +98,26 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error when getting tasks: {error}")
             await asyncio.sleep(delay=3)
 
-    async def processing_tasks(self, http_client: cloudscraper.CloudScraper):
+    async def get_user_web_data(self, http_client: cloudscraper.CloudScraper, tg_web_data: str):
+        try:
+            tg_web_data_encoded = base64.b64encode(tg_web_data.encode('utf-8'))
+            base64_data = tg_web_data_encoded.decode("utf-8")
+            response = http_client.get(f"https://paws.community/app?initData={base64_data}")
+            response.raise_for_status()
+            return True
+        except Exception as error:
+            logger.error(f"{self.session_name} | Unknown error when getting user web data: {error}")
+            await asyncio.sleep(delay=3)
+            return None
+
+    async def processing_tasks(self, http_client: cloudscraper.CloudScraper, tg_web_data: str):
         try:
             tasks = await self.get_all_tasks(http_client)
             if tasks:
                 tasks = sorted(tasks, key=lambda t: t.get('sort', 999))
                 for task in tasks:
                     progress = task['progress']
+                    title = task['title'].split('<')[0]
                     if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS:
                         result = True if (progress['current'] == progress['total'] and
                                           progress['status'] == "claimable") else None
@@ -111,7 +125,7 @@ class Tapper:
                             is_partner = task.get('partner', False)
                             if task['code'] == 'telegram':
                                 if task['flag'] == 0:
-                                    logger.info(f"{self.session_name} | Performing TG task <lc>{task['title']}</lc>")
+                                    logger.info(f"{self.session_name} | Performing TG task <lc>{title}</lc>")
                                 else:
                                     if not settings.JOIN_TG_CHANNELS:
                                         continue
@@ -125,7 +139,7 @@ class Tapper:
                                 if counter > len(referrals):
                                     continue
                             elif (task['code'] in settings.SIMPLE_TASKS or is_partner) and task['flag'] == 0:
-                                logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
+                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
                             elif task['code'] == 'daily' or task['code'] == 'custom':
                                 end_time = task.get('availableUntil', 0)
                                 curr_time = time() * 1000
@@ -138,12 +152,12 @@ class Tapper:
                                     if task['type'] == 'ton':
                                         if progress['status'] != 'check':
                                             continue
-                                logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
+                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
 
                             elif task['code'] == 'wallet':
                                 if self.wallet is not None and len(self.wallet) > 0:
                                     logger.info(
-                                        f"{self.session_name} | Performing wallet task: <lc>{task['title']}</lc>")
+                                        f"{self.session_name} | Performing wallet task: <lc>{title}</lc>")
                                 else:
                                     continue
 
@@ -153,36 +167,44 @@ class Tapper:
                                 if (self.solana_wallet is not None and len(self.solana_wallet) > 0
                                         and end_time > curr_time):
                                     logger.info(f"{self.session_name} | "
-                                                f"Performing Solana wallet task: <lc>{task['title']}</lc>")
+                                                f"Performing Solana wallet task: <lc>{title}</lc>")
                                 else:
                                     continue
 
                             elif task['code'] == 'emojiName':
-                                logger.info(f"{self.session_name} | Performing <lc>{task['title']}</lc> task")
+                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
                                 if '🐾' not in self.tg_session.name:
                                     nickname = f'{self.tg_session.name}🐾'
                                     await self.tg_session.change_tg_nickname(name=nickname)
                                     continue
+                            elif task['code'] == 'website-blank':
+                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
+                                result = await self.get_user_web_data(http_client=http_client, tg_web_data=tg_web_data)
+                                if result is None:
+                                    continue
                             else:
                                 logger.info(
-                                    f"{self.session_name} | Unrecognized task: <lc>{task['title']}</lc>")
+                                    f"{self.session_name} | Unrecognized task: <lc>{title}</lc>")
                                 continue
 
                             result = await self.verify_task(http_client, task['_id'])
 
                         if result is not None:
+                            if len(task['rewards']) == 0:
+                                logger.success(f"{self.session_name} | Task <lc>{title}</lc> completed!")
+                                continue
                             await asyncio.sleep(delay=randint(5, 10))
                             is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
                             if is_claimed:
                                 rewards = task['rewards'][0]
                                 amount = rewards['amount'] if amount is None else amount
-                                logger.success(f"{self.session_name} | Task <lc>{task['title']}</lc> completed! | "
+                                logger.success(f"{self.session_name} | Task <lc>{title}</lc> completed! | "
                                                f"Reward: <e>+{amount}</e> PAWS")
                             else:
                                 logger.info(f"{self.session_name} | "
-                                            f"Rewards for task <lc>{task['title']}</lc> not claimed")
+                                            f"Rewards for task <lc>{title}</lc> not claimed")
                         else:
-                            logger.info(f"{self.session_name} | Task <lc>{task['title']}</lc> not completed")
+                            logger.info(f"{self.session_name} | Task <lc>{title}</lc> not completed")
 
                         await asyncio.sleep(delay=randint(5, 10))
 
@@ -192,7 +214,15 @@ class Tapper:
 
     async def verify_task(self, http_client: cloudscraper.CloudScraper, task_id: str, retry=0):
         try:
-            payload = {'questId': task_id}
+            timestamp = int(time() * 1000)
+            payload = {
+                'additionalData': {
+                    'x': randint(150, 300),
+                    'y': randint(300, 450),
+                    'timestamp': timestamp
+                },
+                'questId': task_id
+            }
             response = http_client.post(f'https://api.paws.community/v1/quests/completed',
                                         json=payload, timeout=60)
             response.raise_for_status()
@@ -414,27 +444,19 @@ class Tapper:
                     logger.info(f"{self.session_name} | {wallet_status}")
                     logger.info(f"{self.session_name} | {solana_wallet_status}")
 
-                    if self.is_grinch is None:
-                        await asyncio.sleep(2)
-                        await self.set_grinch_event(http_client=scraper)
-
                     await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
                                                    is_connected=is_wallet_connected,
                                                    need_to_connect=settings.CONNECT_TON_WALLET,
                                                    need_to_disconnect=settings.DISCONNECT_TON_WALLET)
-                    await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
-                                                   is_connected=is_solana_wallet_connected,
-                                                   need_to_connect=settings.CONNECT_SOLANA_WALLET,
-                                                   need_to_disconnect=settings.DISCONNECT_SOLANA_WALLET)
+                    #await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
+                    #                               is_connected=is_solana_wallet_connected,
+                    #                               need_to_connect=settings.CONNECT_SOLANA_WALLET,
+                    #                               need_to_disconnect=settings.DISCONNECT_SOLANA_WALLET)
 
                     if settings.AUTO_TASK:
                         await asyncio.sleep(delay=randint(5, 10))
-                        await self.processing_tasks(http_client=scraper)
+                        await self.processing_tasks(http_client=scraper, tg_web_data=tg_web_data)
                         logger.info(f"{self.session_name} | All available tasks completed")
-
-                    if not self.is_grinch:
-                        await asyncio.sleep(delay=randint(5, 10))
-                        await self.processing_grinch_tasks(http_client=scraper)
 
                 if settings.CLEAR_TG_NAME and '🐾' in self.tg_session.name:
                     logger.info(f"{self.session_name} | Removing 🐾 from name..")
