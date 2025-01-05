@@ -12,7 +12,7 @@ from bot.config import settings
 from bot.utils import logger
 from bot.exceptions import InvalidSession
 from .agents import get_sec_ch_ua, is_latest_tg_version
-from .headers import headers
+from .headers import headers, web_headers
 
 from random import randint
 
@@ -33,7 +33,7 @@ class Tapper:
         self.paws_id = ''
         self.is_grinch = None
 
-    async def send_plausible_event(self,http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
+    async def send_plausible_event(self, http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
         try:
             payload = {
                 "d": "app.paws.community",
@@ -98,15 +98,23 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error when getting tasks: {error}")
             await asyncio.sleep(delay=3)
 
-    async def get_user_web_data(self, http_client: cloudscraper.CloudScraper, tg_web_data: str):
+    async def perform_web_task(self, http_client: cloudscraper.CloudScraper, tg_web_data: str, task_id: str):
         try:
-            tg_web_data_encoded = base64.b64encode(tg_web_data.encode('utf-8'))
-            base64_data = tg_web_data_encoded.decode("utf-8")
-            response = http_client.get(f"https://paws.community/app?initData={base64_data}")
+            app_headers = http_client.headers.items()
+            http_client.headers = web_headers.copy()
+            auth_data = await self.login(http_client=http_client, tg_web_data=tg_web_data)
+            auth_token = auth_data[0]
+            if auth_token is None:
+                return
+            http_client.headers['Authorization'] = f'Bearer {auth_token}'
+            response = http_client.post(f'https://api.paws.community/v1/quests/completed',
+                                        json={"questId": task_id}, timeout=60)
+            http_client.headers = app_headers
             response.raise_for_status()
-            return True
+            response_json = response.json()
+            return response_json.get('success', False) and response_json.get('data', False)
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error when getting user web data: {error}")
+            logger.error(f"{self.session_name} | Unknown error when performing web task: {error}")
             await asyncio.sleep(delay=3)
             return None
 
@@ -177,11 +185,18 @@ class Tapper:
                                     nickname = f'{self.tg_session.name}🐾'
                                     await self.tg_session.change_tg_nickname(name=nickname)
                                     continue
-                            elif task['code'] == 'website-blank':
-                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
-                                result = await self.get_user_web_data(http_client=http_client, tg_web_data=tg_web_data)
-                                if result is None:
+                            elif task['code'] == 'website-blank' and task['flag'] == 0:
+                                end_time = task.get('availableUntil', 0)
+                                curr_time = time() * 1000
+                                if end_time < curr_time:
                                     continue
+
+                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
+                                result = await self.perform_web_task(http_client=http_client, tg_web_data=tg_web_data,
+                                                                     task_id=task['_id'])
+                                if result:
+                                    logger.success(f"{self.session_name} | Task <lc>{title}</lc> verified!")
+                                break
                             else:
                                 logger.info(
                                     f"{self.session_name} | Unrecognized task: <lc>{title}</lc>")
@@ -261,7 +276,7 @@ class Tapper:
 
     async def get_referrals(self, http_client: cloudscraper.CloudScraper):
         try:
-            response = http_client.get(f'https://api.paws.community/v1/referral/my',
+            response = http_client.get(f'https://api.paws.community/v1/referral/my?page=0&limit=10',
                                        timeout=60)
             response.raise_for_status()
             response_json = response.json()
@@ -330,50 +345,6 @@ class Tapper:
                 return await self.get_user_info(http_client, retry=retry + 1)
 
             logger.error(f"{self.session_name} | Unknown error while getting user info | Error: {e}")
-            await asyncio.sleep(delay=3)
-
-    async def set_grinch_event(self, http_client: cloudscraper.CloudScraper):
-        try:
-            response = http_client.post('https://api.paws.community/v1/user/grinch', json={})
-            response.raise_for_status()
-            response_json = response.json()
-            if response_json.get('success', False):
-                logger.success(f'{self.session_name} | Grinch event successfully started')
-                self.is_grinch = False
-            else:
-                raise Exception
-
-        except Exception as e:
-            logger.error(f"{self.session_name} | Unknown error while setting Grinch event | Error: {e}")
-            await asyncio.sleep(delay=3)
-
-    async def processing_grinch_tasks(self, http_client: cloudscraper.CloudScraper):
-        try:
-            logger.info(f'{self.session_name} | Processing Grinch tasks')
-            response = http_client.get('https://api.paws.community/v1/quests/list?type=christmas')
-            response.raise_for_status()
-            response_json = response.json()
-            tasks = response_json['data']
-            tasks = sorted(tasks, key=lambda t: t.get('sort', 999), reverse=True)
-            for task in tasks:
-                await asyncio.sleep(randint(2, 5))
-                progress = task['progress']
-                if not progress['claimed']:
-                    result = await self.verify_task(http_client, task['_id'])
-                    if result is not None:
-                        await asyncio.sleep(delay=randint(2, 7))
-                        is_claimed, amount = await self.claim_task_reward(http_client, task['_id'])
-                        if is_claimed:
-                            reward = f" | Reward: <e>+{amount}</e> PAWS" if amount is not None else ''
-                            logger.success(f"{self.session_name} | Grinch task <lc>{task['title']}</lc> completed!"
-                                           f"{reward}")
-                        else:
-                            logger.info(f"{self.session_name} | "
-                                        f"Rewards for task <lc>{task['title']}</lc> not claimed")
-                            break
-
-        except Exception as e:
-            logger.error(f"{self.session_name} | Unknown error while processing Grinch tasks | Error: {e}")
             await asyncio.sleep(delay=3)
 
     async def run(self, user_agent: str, proxy: str | None) -> None:
