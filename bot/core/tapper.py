@@ -231,11 +231,6 @@ class Tapper:
         try:
             timestamp = int(time() * 1000)
             payload = {
-                'additionalData': {
-                    'x': randint(150, 300),
-                    'y': randint(300, 450),
-                    'timestamp': timestamp
-                },
                 'questId': task_id
             }
             response = http_client.post(f'https://api.paws.community/v1/quests/completed',
@@ -256,7 +251,15 @@ class Tapper:
 
     async def claim_task_reward(self, http_client: cloudscraper.CloudScraper, task_id: str):
         try:
-            payload = {'questId': task_id}
+            timestamp = int(time() * 1000)
+            payload = {
+                'additionalData': {
+                    'x': randint(150, 300),
+                    'y': randint(300, 450),
+                    'timestamp': timestamp
+                },
+                'questId': task_id
+            }
             response = http_client.post(f'https://api.paws.community/v1/quests/claim',
                                         json=payload, timeout=60)
             response.raise_for_status()
