@@ -231,6 +231,11 @@ class Tapper:
         try:
             timestamp = int(time() * 1000)
             payload = {
+                'additionalData': {
+                    'x': randint(150, 300),
+                    'y': randint(300, 450),
+                    'timestamp': timestamp
+                },
                 'questId': task_id
             }
             response = http_client.post(f'https://api.paws.community/v1/quests/completed',
