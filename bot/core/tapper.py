@@ -151,15 +151,14 @@ class Tapper:
                                 curr_time = time() * 1000
                                 if end_time < curr_time:
                                     continue
-                                if task['flag'] == 1:
-                                    if task['type'] == 'social':
-                                        if progress['current'] != progress['total'] or progress['status'] != 'start':
-                                            continue
-                                    if task['type'] == 'ton':
-                                        if progress['status'] != 'check':
-                                            continue
+                                if task['_id'] != "678556b8ed515bd1fbea8147" or progress['status'] == 'waiting':
+                                    continue
                                 logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
-
+                                result = await self.verify_task(http_client, task['_id'], None)
+                                if result:
+                                    logger.success(f"{self.session_name} | Task <lc>{title}</lc> completed "
+                                                   f"| Waiting to claim")
+                                continue
                             elif task['code'] == 'wallet':
                                 if self.wallet is not None and len(self.wallet) > 0:
                                     logger.info(
@@ -219,6 +218,8 @@ class Tapper:
 
                             result = await self.verify_task(http_client, task['_id'], None)
 
+                        if task['_id'] == "678556b8ed515bd1fbea8147":
+                            continue
                         if result is not None:
                             if len(task['rewards']) == 0:
                                 logger.success(f"{self.session_name} | Task <lc>{title}</lc> completed!")
