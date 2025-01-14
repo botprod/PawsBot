@@ -32,6 +32,8 @@ class Tapper:
         self.solana_wallet = ''
         self.paws_id = ''
         self.is_grinch = None
+        self.sol_proof = False
+        self.ton_proof = False
 
     async def send_plausible_event(self, http_client: cloudscraper.CloudScraper, web_data: str, event_name='pageview'):
         try:
@@ -100,13 +102,9 @@ class Tapper:
 
     async def perform_web_task(self, http_client: cloudscraper.CloudScraper, tg_web_data: str, task_id: str):
         try:
-            app_headers = http_client.headers.items()
+            app_headers = http_client.headers
             http_client.headers = web_headers.copy()
-            auth_data = await self.login(http_client=http_client, tg_web_data=tg_web_data)
-            auth_token = auth_data[0]
-            if auth_token is None:
-                return
-            http_client.headers['Authorization'] = f'Bearer {auth_token}'
+            http_client.headers['Authorization'] = app_headers['Authorization']
             response = http_client.post(f'https://api.paws.community/v1/quests/completed',
                                         json={"questId": task_id}, timeout=60)
             http_client.headers = app_headers
@@ -185,24 +183,41 @@ class Tapper:
                                     nickname = f'{self.tg_session.name}🐾'
                                     await self.tg_session.change_tg_nickname(name=nickname)
                                     continue
-                            elif task['code'] == 'website-blank' and task['flag'] == 0:
-                                end_time = task.get('availableUntil', 0)
-                                curr_time = time() * 1000
-                                if end_time < curr_time:
-                                    continue
+                            elif task['code'] == 'website-blank':
+                                if task['flag'] == 0:
+                                    end_time = task.get('availableUntil', 0)
+                                    curr_time = time() * 1000
+                                    if end_time < curr_time:
+                                        continue
 
-                                logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
-                                result = await self.perform_web_task(http_client=http_client, tg_web_data=tg_web_data,
-                                                                     task_id=task['_id'])
-                                if result:
-                                    logger.success(f"{self.session_name} | Task <lc>{title}</lc> verified!")
-                                break
+                                    logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
+                                    result = await self.perform_web_task(http_client=http_client, tg_web_data=tg_web_data,
+                                                                         task_id=task['_id'])
+                                    if result:
+                                        logger.success(f"{self.session_name} | Task <lc>{title}</lc> verified!")
+                                    break
+                                elif task['type'] == "walletConnect":
+                                    logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
+                                    if self.ton_proof and self.sol_proof:
+                                        additional_data = {
+                                            'timestamp': int(time() * 1000),
+                                            'x': -1,
+                                            'y': -1
+                                        }
+                                        result = await self.verify_task(http_client, task['_id'], additional_data)
+                                        if result is not None:
+                                            logger.success(f"{self.session_name} | Task <lc>{title}</lc> completed!")
+                                    else:
+                                        logger.info(f"{self.session_name} | Can't complete <lc>{title}</lc> task "
+                                                    f"| Connected wallets: Ton - <e>{self.ton_proof}</e>, "
+                                                    f"Solana - <e>{self.sol_proof}</e>")
+                                    continue
                             else:
                                 logger.info(
                                     f"{self.session_name} | Unrecognized task: <lc>{title}</lc>")
                                 continue
 
-                            result = await self.verify_task(http_client, task['_id'])
+                            result = await self.verify_task(http_client, task['_id'], None)
 
                         if result is not None:
                             if len(task['rewards']) == 0:
@@ -227,15 +242,19 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error when processing tasks: {error}")
             await asyncio.sleep(delay=3)
 
-    async def verify_task(self, http_client: cloudscraper.CloudScraper, task_id: str, retry=0):
+    async def verify_task(self, http_client: cloudscraper.CloudScraper, task_id: str,
+                          additional_data: dict[str, int] | None, retry=0):
         try:
-            timestamp = int(time() * 1000)
-            payload = {
-                'additionalData': {
+            if additional_data is None:
+                add_data = {
+                    'timestamp': int(time() * 1000),
                     'x': randint(150, 300),
-                    'y': randint(300, 450),
-                    'timestamp': timestamp
-                },
+                    'y': randint(300, 450)
+                }
+            else:
+                add_data = additional_data
+            payload = {
+                'additionalData': add_data,
                 'questId': task_id
             }
             response = http_client.post(f'https://api.paws.community/v1/quests/completed',
@@ -249,7 +268,7 @@ class Tapper:
             if retry < 3:
                 logger.warning(f"{self.session_name} | Can't verify task | Retry attempt: {retry}")
                 await asyncio.sleep(delay=randint(5, 10))
-                return await self.verify_task(http_client, task_id, retry=retry + 1)
+                return await self.verify_task(http_client, task_id, additional_data, retry=retry + 1)
 
             logger.error(f"{self.session_name} | Unknown error while verifying task <lc>{task_id}</lc> | Error: {e}")
             await asyncio.sleep(delay=3)
@@ -355,6 +374,34 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while getting user info | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def check_eligibility(self, http_client: cloudscraper.CloudScraper):
+        try:
+            app_headers = http_client.headers
+            http_client.headers = web_headers.copy()
+            http_client.headers['Authorization'] = app_headers['Authorization']
+            response = http_client.get(f'https://api.paws.community/v1/eligibility')
+            http_client.headers = app_headers
+            response.raise_for_status()
+            response_json = response.json()
+            data = response_json.get('data')
+            logger.info(f'{self.session_name} | Checking eligibility for airdrop..')
+            for criteria in data:
+                criteria_name = criteria['criteriaName']
+                completed = criteria['meetsCriteria']
+                criteria_type = criteria['type']
+                req_value = criteria['requiredValue']
+                user_value = criteria['userValue']
+                value_info = ''
+                if not isinstance(req_value, bool) and not completed:
+                    value_info = f'(<g>{user_value}/{req_value}</g>)'
+
+                logger.info(f'{self.session_name} | Criteria: <lc>{criteria_name}</lc>, Type: <y>{criteria_type}</y> '
+                            f'| Completed: <e>{completed}</e> {value_info}')
+        except Exception as error:
+            logger.error(f"{self.session_name} | Unknown error when checking eligibility: {error}")
+            await asyncio.sleep(delay=3)
+            return None
+
     async def run(self, user_agent: str, proxy: str | None) -> None:
         access_token_created_time = 0
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
@@ -410,18 +457,30 @@ class Tapper:
                     balance = user_info['gameData']['balance']
                     wallet = user_info['userData'].get('wallet', None)
                     solana_wallet = user_info['userData'].get('solanaWallet', None)
+                    ton_web_wallet_proof = user_info['userData'].get('proofTonWallet', None)
+                    sol_web_wallet_proof = user_info['userData'].get('proofSolanaWallet', None)
                     self.is_grinch = user_info.get('grinchRemoved', None)
                     self.wallet = wallet
                     self.solana_wallet = solana_wallet
                     is_wallet_connected = wallet is not None and len(wallet) > 0
                     is_solana_wallet_connected = solana_wallet is not None and len(solana_wallet) > 0
-                    wallet_status = f"Ton Wallet: <y>{wallet}</y>" if is_wallet_connected \
-                        else 'Ton wallet not connected'
-                    solana_wallet_status = f"Solana wallet: <y>{solana_wallet}</y>" if is_solana_wallet_connected \
-                        else 'Solana wallet not connected'
+                    is_ton_wallet_verified = ton_web_wallet_proof is not None and len(ton_web_wallet_proof) > 0
+                    is_sol_wallet_verified = sol_web_wallet_proof is not None and len(sol_web_wallet_proof) > 0
+                    self.ton_proof = is_ton_wallet_verified
+                    self.sol_proof = is_sol_wallet_verified
+                    wallet_status = f"Ton Wallet (app): <y>{wallet}</y>" if is_wallet_connected \
+                        else 'Ton wallet not connected in app'
+                    wallet_status_web = f"Ton Wallet web proof: <y>{ton_web_wallet_proof}</y>" if is_ton_wallet_verified \
+                        else 'Ton wallet not connected in web'
+                    solana_wallet_status = f"Solana wallet (app): <y>{solana_wallet}</y>" if is_solana_wallet_connected \
+                        else 'Solana wallet not connected in app'
+                    solana_wallet_status_web = f"Solana wallet web proof: <y>{sol_web_wallet_proof}</y>" \
+                        if is_sol_wallet_verified else 'Solana wallet not connected in web'
                     logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS")
                     logger.info(f"{self.session_name} | {wallet_status}")
+                    logger.info(f"{self.session_name} | {wallet_status_web}")
                     logger.info(f"{self.session_name} | {solana_wallet_status}")
+                    logger.info(f"{self.session_name} | {solana_wallet_status_web}")
 
                     await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
                                                    is_connected=is_wallet_connected,
@@ -432,10 +491,23 @@ class Tapper:
                     #                               need_to_connect=settings.CONNECT_SOLANA_WALLET,
                     #                               need_to_disconnect=settings.DISCONNECT_SOLANA_WALLET)
 
+                    #if settings.VERIFY_WALLETS:
+                    #    if self.wallet and not is_ton_wallet_verified and settings.CONNECT_TON_WALLET:
+                    #        await asyncio.sleep(delay=randint(5, 10))
+                    #        await verify_ton_wallet(session_name=self.session_name, scraper=scraper, wallet=self.wallet)
+                    #    if not is_sol_wallet_verified and settings.CONNECT_SOLANA_WALLET:
+                    #        await asyncio.sleep(delay=randint(5, 10))
+                    #        await verify_solana_wallet(session_name=self.session_name,
+                    #                                   scraper=scraper, wallet=self.solana_wallet)
+
                     if settings.AUTO_TASK:
                         await asyncio.sleep(delay=randint(5, 10))
                         await self.processing_tasks(http_client=scraper, tg_web_data=tg_web_data)
                         logger.info(f"{self.session_name} | All available tasks completed")
+
+                    if settings.CHECK_ELIGIBILITY:
+                        await asyncio.sleep(delay=randint(5, 10))
+                        await self.check_eligibility(http_client=scraper)
 
                 if settings.CLEAR_TG_NAME and '🐾' in self.tg_session.name:
                     logger.info(f"{self.session_name} | Removing 🐾 from name..")

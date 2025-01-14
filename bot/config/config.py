@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     CONNECT_SOLANA_WALLET: bool = False
     DISCONNECT_SOLANA_WALLET: bool = False
     CLEAR_TG_NAME: bool = False
+    CHECK_ELIGIBILITY: bool = True
 
 
 settings = Settings()
