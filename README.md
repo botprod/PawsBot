@@ -37,6 +37,8 @@
 | **CONNECT_SOLANA_WALLET**    | Connect Solana Wallet from solana_wallets.json to PAWS bot (default - False) |
 | **DISCONNECT_SOLANA_WALLET** |             Disconnect Solana Wallet from PAWS (default - False)             |
 | **CLEAR_TG_NAME**            |                 Remove '🐾' from user name (default - False)                 |
+| **CHECK_ELIGIBILITY**        |              Check airdrop eligibility status (default - True)               |
+| **VERIFY_WALLETS**           |     Verify Ton and Solana wallets in web (paid feature, default - False)     |
 
 ## Quick Start 📚
 
