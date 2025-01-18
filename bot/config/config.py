@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     REF_ID: str = 'idqtVYZG'
     DISABLED_TASKS: list[str] = ['boost', 'emoji']
     SIMPLE_TASKS: list[str] = ['twitter', 'linked', 'paragraph']
+    WEB_TASKS: list[str] = ["67814ddc6806dce25e57fe20", "67717bfb067c823d800e5a14"]
     VERIFY_WALLETS: bool = False
     CONNECT_TON_WALLET: bool = False
     DISCONNECT_TON_WALLET: bool = False

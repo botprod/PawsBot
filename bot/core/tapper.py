@@ -183,7 +183,7 @@ class Tapper:
                                     await self.tg_session.change_tg_nickname(name=nickname)
                                     continue
                             elif task['code'] == 'website-blank':
-                                if task['flag'] == 0:
+                                if task['flag'] == 0 and task['_id'] in settings.WEB_TASKS:
                                     end_time = task.get('availableUntil', 0)
                                     curr_time = time() * 1000
                                     if end_time < curr_time:
@@ -211,7 +211,7 @@ class Tapper:
                                                     f"| Connected wallets: Ton - <e>{self.ton_proof}</e>, "
                                                     f"Solana - <e>{self.sol_proof}</e>")
                                     continue
-                                elif task['type'] == "pwa" and task['_id'] == '67867e662397c64561caa4f6':
+                                elif task['type'] == "pwa" and task['_id'] == "678a9cc119aff2d170842b10":
                                     logger.info(f"{self.session_name} | Performing <lc>{title}</lc> custom task")
                                     result = await self.perform_custom_task(http_client, task['_id'])
                                     if result:
@@ -284,7 +284,7 @@ class Tapper:
     async def perform_custom_task(self, http_client: cloudscraper.CloudScraper, task_id: str):
         try:
             payload = {
-                'code': "oSmGOqWsuFNw",
+                'code': "3CLJCb5uvE8n",
                 'questId': task_id
             }
             app_headers = http_client.headers
@@ -314,7 +314,7 @@ class Tapper:
                 },
                 'questId': task_id
             }
-            payload = {'questId': task_id} if task_id == '67867e662397c64561caa4f6' else payload
+            payload = {'questId': task_id} if task_id == "678a9cc119aff2d170842b10" else payload
             response = http_client.post(f'https://api.paws.community/v1/quests/claim',
                                         json=payload, timeout=60)
             response.raise_for_status()
