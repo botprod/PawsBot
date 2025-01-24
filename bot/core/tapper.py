@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import random
 import sys
 from time import time
 
@@ -182,6 +183,20 @@ class Tapper:
                                     nickname = f'{self.tg_session.name}🐾'
                                     await self.tg_session.change_tg_nickname(name=nickname)
                                     continue
+                            elif task['code'] == 'touches':
+                                end_time = task.get('availableUntil', 0)
+                                curr_time = time() * 1000
+                                if end_time > curr_time:
+                                    logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
+                                    additional_data = {
+                                        'timestamp': int(time() * 1000),
+                                        'x': round(random.uniform(150, 400), randint(9, 10)),
+                                        'y': round(random.uniform(300, 500), randint(9, 10))
+                                    }
+                                    result = await self.verify_task(http_client, task['_id'], additional_data)
+                                    if result is not None:
+                                        logger.success(f"{self.session_name} | Task <lc>{title}</lc> verified!")
+                                continue
                             elif task['code'] == 'website-blank':
                                 if task['flag'] == 0 and task['_id'] in settings.WEB_TASKS:
                                     end_time = task.get('availableUntil', 0)
@@ -314,7 +329,7 @@ class Tapper:
                 },
                 'questId': task_id
             }
-            payload = {'questId': task_id} if task_id == "678a9cc119aff2d170842b10" else payload
+            payload = {'questId': task_id} if task_id == "67926e87df75d42c3fff4ccc" else payload
             response = http_client.post(f'https://api.paws.community/v1/quests/claim',
                                         json=payload, timeout=60)
             response.raise_for_status()
@@ -513,10 +528,10 @@ class Tapper:
                     logger.info(f"{self.session_name} | {solana_wallet_status}")
                     logger.info(f"{self.session_name} | {solana_wallet_status_web}")
 
-                    await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
-                                                   is_connected=is_wallet_connected,
-                                                   need_to_connect=settings.CONNECT_TON_WALLET,
-                                                   need_to_disconnect=settings.DISCONNECT_TON_WALLET)
+                    #await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
+                    #                               is_connected=is_wallet_connected,
+                    #                               need_to_connect=settings.CONNECT_TON_WALLET,
+                    #                               need_to_disconnect=settings.DISCONNECT_TON_WALLET)
                     #await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
                     #                               is_connected=is_solana_wallet_connected,
                     #                               need_to_connect=settings.CONNECT_SOLANA_WALLET,
