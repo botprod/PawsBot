@@ -134,7 +134,7 @@ class Tapper:
                                 if task['flag'] == 0:
                                     logger.info(f"{self.session_name} | Performing TG task <lc>{title}</lc>")
                                 else:
-                                    if not settings.JOIN_TG_CHANNELS:
+                                    if task['partner-app'] or not settings.JOIN_TG_CHANNELS:
                                         continue
 
                                     url = task['data']
