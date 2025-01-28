@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import random
+import re
 import sys
 from time import time
 
@@ -124,7 +125,7 @@ class Tapper:
                 tasks = sorted(tasks, key=lambda t: t.get('sort', 999))
                 for task in tasks:
                     progress = task['progress']
-                    title = task['title'].split('<')[0]
+                    title = re.sub(r'<[^>]+>', '', task['title'])
                     if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS:
                         result = True if (progress['current'] == progress['total'] and
                                           progress['status'] == "claimable") else None
@@ -518,14 +519,14 @@ class Tapper:
                         else 'Ton wallet not connected in app'
                     wallet_status_web = f"Ton Wallet web proof: <y>{ton_web_wallet_proof}</y>" if is_ton_wallet_verified \
                         else 'Ton wallet not connected in web'
-                    solana_wallet_status = f"Solana wallet (app): <y>{solana_wallet}</y>" if is_solana_wallet_connected \
-                        else 'Solana wallet not connected in app'
+                    #solana_wallet_status = f"Solana wallet (app): <y>{solana_wallet}</y>" if is_solana_wallet_connected \
+                    #    else 'Solana wallet not connected in app'
                     solana_wallet_status_web = f"Solana wallet web proof: <y>{sol_web_wallet_proof}</y>" \
                         if is_sol_wallet_verified else 'Solana wallet not connected in web'
                     logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS")
                     logger.info(f"{self.session_name} | {wallet_status}")
                     logger.info(f"{self.session_name} | {wallet_status_web}")
-                    logger.info(f"{self.session_name} | {solana_wallet_status}")
+                    #logger.info(f"{self.session_name} | {solana_wallet_status}")
                     logger.info(f"{self.session_name} | {solana_wallet_status_web}")
 
                     #await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
@@ -551,9 +552,9 @@ class Tapper:
                         await self.processing_tasks(http_client=scraper, tg_web_data=tg_web_data)
                         logger.info(f"{self.session_name} | All available tasks completed")
 
-                    if settings.CHECK_ELIGIBILITY:
-                        await asyncio.sleep(delay=randint(5, 10))
-                        await self.check_eligibility(http_client=scraper)
+                    #if settings.CHECK_ELIGIBILITY:
+                    #    await asyncio.sleep(delay=randint(5, 10))
+                    #    await self.check_eligibility(http_client=scraper)
 
                 if settings.CLEAR_TG_NAME and '🐾' in self.tg_session.name:
                     logger.info(f"{self.session_name} | Removing 🐾 from name..")
