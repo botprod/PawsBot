@@ -10,7 +10,7 @@ from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from bot.config import settings
-from solver_tg import Api_GXP
+from bot.core.solver_tg import Api_GXP
 from bot.utils import logger
 from bot.exceptions import InvalidSession
 from .agents import get_sec_ch_ua, is_latest_tg_version
@@ -425,13 +425,13 @@ class Tapper:
 
     async def solve_captcha(self, http_client: cloudscraper.CloudScraper):
         solver = Api_GXP()
-        solver.key = settings.CAPTCHA_API_KEY
+        solver.key = f"{settings.CAPTCHA_API_KEY}|SOFTID918432365"
         for attempt in range(3):
             await asyncio.sleep(delay=randint(5, 10))
             logger.info(f"{self.session_name} | Attempt to solve CAPTCHA ({attempt + 1}/3)")
             try:
-                balance = solver.get_balance()
-                if balance < 0.1:
+                balance = float(solver.get_balance())
+                if balance < 0.05:
                     logger.warning(f"{self.session_name} | Not enough balance in 2Captcha service")
                     return None
                 data = {
@@ -444,13 +444,12 @@ class Tapper:
                     "version": "v2"
                 }
                 result = solver.run(data)[:20]
-                print(result)
-                if result and result.get('code'):
+                if result and result != 'ERROR_CAPTCHA_UNSOLVABLE':
                     logger.info(f"{self.session_name} | Successfully solved CAPTCHA")
-                    return result['code']
+                    return result
 
             except Exception as e:
-                logger.warning(f"{self.session_name} | Error while solving captcha")
+                logger.warning(f"{self.session_name} | Error while solving captcha {e}")
                 await asyncio.sleep(delay=3)
                 return None
 
