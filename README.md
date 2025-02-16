@@ -39,6 +39,8 @@
 | **CLEAR_TG_NAME**            |                 Remove '🐾' from user name (default - False)                 |
 | **CHECK_ELIGIBILITY**        |              Check airdrop eligibility status (default - True)               |
 | **VERIFY_WALLETS**           |     Verify Ton and Solana wallets in web (paid feature, default - False)     |
+| **SOLVE_CAPTCHA**            |       Enable Captcha solver for activity check task (default - False)        |
+| **CAPTCHA_API_KEY**          |  Your API key to solve captcha (you can get it from https://2captcha.com/)   |
 
 ## Quick Start 📚
 

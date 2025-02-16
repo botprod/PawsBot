@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     DISCONNECT_SOLANA_WALLET: bool = False
     CLEAR_TG_NAME: bool = False
     CHECK_ELIGIBILITY: bool = True
+    SOLVE_CAPTCHA: bool = False
+    CAPTCHA_API_KEY: str = ""
 
 
 settings = Settings()

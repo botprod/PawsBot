@@ -26,7 +26,7 @@ start_text = """
 Select an action:
 
     1. Run bot
-    2. Create session (Telethon)
+    2. Create session (Pyrogram)
     3. Generate TON wallets
     4. Generate Solana wallets
 """

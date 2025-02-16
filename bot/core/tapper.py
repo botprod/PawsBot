@@ -10,7 +10,7 @@ from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from bot.config import settings
-
+from twocaptcha import TwoCaptcha
 from bot.utils import logger
 from bot.exceptions import InvalidSession
 from .agents import get_sec_ch_ua, is_latest_tg_version
@@ -126,7 +126,8 @@ class Tapper:
                 for task in tasks:
                     progress = task['progress']
                     title = re.sub(r'<[^>]+>', '', task['title'])
-                    if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS:
+                    if not progress['claimed'] and task['code'] not in settings.DISABLED_TASKS and task[
+                        '_id'] != "679bc06e70efab8b96d0efdf":
                         result = True if (progress['current'] == progress['total'] and
                                           progress['status'] == "claimable") else None
                         if progress['current'] < progress['total'] or progress['status'] != "claimable":
@@ -206,7 +207,8 @@ class Tapper:
                                         continue
 
                                     logger.info(f"{self.session_name} | Performing <lc>{title}</lc> task")
-                                    result = await self.perform_web_task(http_client=http_client, tg_web_data=tg_web_data,
+                                    result = await self.perform_web_task(http_client=http_client,
+                                                                         tg_web_data=tg_web_data,
                                                                          task_id=task['_id'])
                                     if result:
                                         logger.success(f"{self.session_name} | Task <lc>{title}</lc> verified!")
@@ -421,6 +423,49 @@ class Tapper:
             logger.error(f"{self.session_name} | Unknown error while getting user info | Error: {e}")
             await asyncio.sleep(delay=3)
 
+    async def solve_captcha(self, http_client: cloudscraper.CloudScraper):
+        solver = TwoCaptcha(settings.CAPTCHA_API_KEY)
+        for attempt in range(3):
+            await asyncio.sleep(delay=randint(5, 10))
+            logger.info(f"{self.session_name} | Attempt to solve CAPTCHA ({attempt + 1}/3)")
+            try:
+                balance = solver.balance()
+                if balance < 0.1:
+                    logger.warning(f"{self.session_name} | Not enough balance in 2Captcha service")
+                    return None
+
+                result = solver.recaptcha(
+                    sitekey="6Lda_s0qAAAAAItgCSBeQN_DVlM9YOk9MccqMG6_",
+                    url="https://paws.community/app?tab=claim",
+                    version='v2',
+                    enterprise=1,
+                    userAgent=http_client.headers['User-Agent'],
+                    action="submit")
+
+                if result and result.get('code'):
+                    logger.info(f"{self.session_name} | Successfully solved CAPTCHA")
+                    return result['code']
+
+            except Exception as e:
+                logger.warning(f"{self.session_name} | Error while solving captcha")
+                await asyncio.sleep(delay=3)
+                return None
+
+    async def pybass_activity_checker(self, http_client: cloudscraper.CloudScraper):
+        try:
+            result = await self.solve_captcha(http_client)
+            if not result:
+                return False
+            payload = {"recaptchaToken": result}
+            response = http_client.post(f"https://api.paws.community/v1/user/activity", json=payload)
+            response.raise_for_status()
+            response_json = response.json()
+            return response_json.get('success') and response_json.get('data')
+        except Exception as error:
+            logger.error(f"{self.session_name} | Unknown error while bypassing activity checker: {error}")
+            await asyncio.sleep(delay=3)
+            return False
+
     async def check_eligibility(self, http_client: cloudscraper.CloudScraper):
         try:
             app_headers = http_client.headers
@@ -432,6 +477,7 @@ class Tapper:
             response_json = response.json()
             data = response_json.get('data')
             logger.info(f'{self.session_name} | Checking eligibility for airdrop..')
+            activity_check = False
             for criteria in data:
                 criteria_name = criteria['criteriaName']
                 completed = criteria['meetsCriteria']
@@ -444,6 +490,15 @@ class Tapper:
 
                 logger.info(f'{self.session_name} | Criteria: <lc>{criteria_name}</lc>, Type: <y>{criteria_type}</y> '
                             f'| Completed: <e>{completed}</e> {value_info}')
+
+                if criteria_name == 'activityCheck' and user_value:
+                    activity_check = True
+
+            if settings.SOLVE_CAPTCHA and not activity_check:
+                result = await self.pybass_activity_checker(http_client)
+                if result:
+                    logger.info(f'{self.session_name} | Successfully passed activity checker!')
+
         except Exception as error:
             logger.error(f"{self.session_name} | Unknown error when checking eligibility: {error}")
             await asyncio.sleep(delay=3)
@@ -552,9 +607,9 @@ class Tapper:
                         await self.processing_tasks(http_client=scraper, tg_web_data=tg_web_data)
                         logger.info(f"{self.session_name} | All available tasks completed")
 
-                    #if settings.CHECK_ELIGIBILITY:
-                    #    await asyncio.sleep(delay=randint(5, 10))
-                    #    await self.check_eligibility(http_client=scraper)
+                    if settings.CHECK_ELIGIBILITY:
+                        await asyncio.sleep(delay=randint(5, 10))
+                        await self.check_eligibility(http_client=scraper)
 
                 if settings.CLEAR_TG_NAME and '🐾' in self.tg_session.name:
                     logger.info(f"{self.session_name} | Removing 🐾 from name..")
