@@ -10,7 +10,7 @@ from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from bot.config import settings
-from twocaptcha import TwoCaptcha
+from solver_tg import Api_GXP
 from bot.utils import logger
 from bot.exceptions import InvalidSession
 from .agents import get_sec_ch_ua, is_latest_tg_version
@@ -82,7 +82,7 @@ class Tapper:
 
     async def check_proxy(self, http_client: cloudscraper.CloudScraper, proxy: str) -> None:
         try:
-            response = http_client.get(url='https://ipinfo.io/ip', timeout=20)
+            response = http_client.get(url='https://api.botprod.ru/ip', timeout=120)
             ip = response.text
             logger.info(f"{self.session_name} | Proxy IP: {ip}")
         except Exception as error:
@@ -424,24 +424,27 @@ class Tapper:
             await asyncio.sleep(delay=3)
 
     async def solve_captcha(self, http_client: cloudscraper.CloudScraper):
-        solver = TwoCaptcha(settings.CAPTCHA_API_KEY)
+        solver = Api_GXP()
+        solver.key = settings.CAPTCHA_API_KEY
         for attempt in range(3):
             await asyncio.sleep(delay=randint(5, 10))
             logger.info(f"{self.session_name} | Attempt to solve CAPTCHA ({attempt + 1}/3)")
             try:
-                balance = solver.balance()
+                balance = solver.get_balance()
                 if balance < 0.1:
                     logger.warning(f"{self.session_name} | Not enough balance in 2Captcha service")
                     return None
-
-                result = solver.recaptcha(
-                    sitekey="6Lda_s0qAAAAAItgCSBeQN_DVlM9YOk9MccqMG6_",
-                    url="https://paws.community/app?tab=claim",
-                    version='v2',
-                    enterprise=1,
-                    userAgent=http_client.headers['User-Agent'],
-                    action="submit")
-
+                data = {
+                    "method": "userrecaptcha",
+                    "pageurl": "https://paws.community/app?tab=claim",
+                    "sitekey": "6Lda_s0qAAAAAItgCSBeQN_DVlM9YOk9MccqMG6_",
+                    "enterprise": "1",
+                    "action": "submit",
+                    "userAgent": http_client.headers['User-Agent'],
+                    "version": "v2"
+                }
+                result = solver.run(data)[:20]
+                print(result)
                 if result and result.get('code'):
                     logger.info(f"{self.session_name} | Successfully solved CAPTCHA")
                     return result['code']
@@ -539,7 +542,7 @@ class Tapper:
                     else:
                         logger.info(f"{self.session_name} | Antidetect: endpoints successfully checked")
 
-                    #if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
+                    # if await self.send_plausible_event(http_client=scraper, web_data="https://app.paws.community/") is False:
                     #   await asyncio.sleep(randint(5, 10))
                     #   continue
                     auth_data = await self.login(http_client=scraper, tg_web_data=tg_web_data)
@@ -574,21 +577,21 @@ class Tapper:
                         else 'Ton wallet not connected in app'
                     wallet_status_web = f"Ton Wallet web proof: <y>{ton_web_wallet_proof}</y>" if is_ton_wallet_verified \
                         else 'Ton wallet not connected in web'
-                    #solana_wallet_status = f"Solana wallet (app): <y>{solana_wallet}</y>" if is_solana_wallet_connected \
+                    # solana_wallet_status = f"Solana wallet (app): <y>{solana_wallet}</y>" if is_solana_wallet_connected \
                     #    else 'Solana wallet not connected in app'
                     solana_wallet_status_web = f"Solana wallet web proof: <y>{sol_web_wallet_proof}</y>" \
                         if is_sol_wallet_verified else 'Solana wallet not connected in web'
                     logger.info(f"{self.session_name} | Balance: <e>{balance}</e> PAWS")
                     logger.info(f"{self.session_name} | {wallet_status}")
                     logger.info(f"{self.session_name} | {wallet_status_web}")
-                    #logger.info(f"{self.session_name} | {solana_wallet_status}")
+                    # logger.info(f"{self.session_name} | {solana_wallet_status}")
                     logger.info(f"{self.session_name} | {solana_wallet_status_web}")
 
-                    #await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
+                    # await self.check_wallet_status(scraper=scraper, wallet_type='Ton',
                     #                               is_connected=is_wallet_connected,
                     #                               need_to_connect=settings.CONNECT_TON_WALLET,
                     #                               need_to_disconnect=settings.DISCONNECT_TON_WALLET)
-                    #await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
+                    # await self.check_wallet_status(scraper=scraper, wallet_type='Solana',
                     #                               is_connected=is_solana_wallet_connected,
                     #                               need_to_connect=settings.CONNECT_SOLANA_WALLET,
                     #                               need_to_disconnect=settings.DISCONNECT_SOLANA_WALLET)
